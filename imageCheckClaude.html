@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>S5 · Visual Analyser</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0f0f0f;color:#ddd;font-family:'IBM Plex Mono',monospace;font-size:13px;min-height:100vh;padding:32px 24px;max-width:860px;margin:0 auto}
+h1{font-size:16px;letter-spacing:3px;text-transform:uppercase;color:#9b7ee0;margin-bottom:4px}
+.sub{font-size:10px;color:#444;letter-spacing:2px;text-transform:uppercase;margin-bottom:28px}
+label{display:block;font-size:10px;color:#555;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;margin-top:20px}
+textarea{width:100%;background:#1a1a1a;border:1px solid #2a2a2a;color:#ddd;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:12px;outline:none;resize:vertical;line-height:1.7;transition:border-color .15s}
+textarea:focus{border-color:#7c5cbf}
+textarea::placeholder{color:#333}
+.upload-row{display:flex;gap:8px;margin-top:12px;margin-bottom:6px}
+.upload-btn{flex:1;background:#1a1a1a;border:1px solid #2a2a2a;color:#888;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:10px;cursor:pointer;text-align:center;transition:border-color .15s,color .15s}
+.upload-btn:hover{border-color:#7c5cbf;color:#9b7ee0}
+.upload-btn.listening{border-color:#9b7ee0;color:#9b7ee0;background:rgba(124,92,191,.1)}
+input[type=file]{display:none}
+.hint{font-size:10px;color:#444;margin-bottom:4px;line-height:1.6}
+.uploading{font-size:10px;color:#f39c12;margin-top:4px;min-height:14px}
+.previews{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;margin-bottom:4px}
+.thumb{position:relative;width:72px;height:54px}
+.thumb img{width:100%;height:100%;object-fit:cover;border:1px solid #2a2a2a;display:block}
+.thumb-del{position:absolute;top:1px;right:1px;background:rgba(0,0,0,.8);border:none;color:#fff;width:16px;height:16px;cursor:pointer;font-size:12px;line-height:16px;text-align:center;padding:0}
+button.go{width:100%;background:rgba(124,92,191,.15);border:1px solid #7c5cbf;color:#9b7ee0;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;padding:14px;cursor:pointer;margin-top:20px;margin-bottom:16px;transition:background .2s;display:flex;align-items:center;justify-content:center;gap:10px}
+button.go:hover:not(:disabled){background:rgba(124,92,191,.28)}
+button.go:disabled{opacity:.45;cursor:not-allowed}
+.spinner{width:13px;height:13px;border:1.5px solid rgba(155,127,232,.25);border-top-color:#9b7ee0;border-radius:50%;animation:spin .7s linear infinite;display:none}
+.spinner.on{display:block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.err{background:rgba(231,76,60,.08);border:1px solid rgba(231,76,60,.3);color:#e74c3c;padding:10px 14px;font-size:11px;margin-bottom:16px;line-height:1.5;display:none}
+.results{display:none}
+.results.show{display:block}
+.score-banner{display:flex;align-items:center;gap:20px;background:#1a1a1a;border:1px solid #252525;padding:18px 20px;margin-bottom:16px}
+.score-circle{width:68px;height:68px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;border:2px solid;flex-shrink:0}
+.rec-badge{display:inline-block;padding:4px 12px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;border:1px solid;margin-bottom:8px}
+.summary{font-size:12px;color:#999;line-height:1.7}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.cell{background:#1a1a1a;border:1px solid #222;padding:10px 12px}
+.cell-lbl{font-size:9px;color:#444;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px}
+.cell-val{font-size:12px;line-height:1.5}
+.flags{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
+.flag-block{background:#1a1a1a;border:1px solid #222;padding:10px 12px}
+.flag-title{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px}
+.flag-item{font-size:11px;padding:3px 0;border-bottom:1px solid #1c1c1c;line-height:1.5}
+.flag-item:last-child{border:none}
+.photos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:8px}
+.photos-grid img{width:100%;height:150px;object-fit:cover;border:1px solid #222;display:block}
+</style>
+</head>
+<body>
+
+<h1>S5 · Visual Analyser</h1>
+<div class="sub">Classic Vehicle Photo Evaluation</div>
+
+<label>Image URLs — paste directly, or upload photos below</label>
+<textarea id="urls" rows="4" placeholder="https://images.blocketcdn.se/item/photo1.jpg&#10;https://images.autoscout24.com/photo.jpg&#10;Uploaded photos appear here automatically…"></textarea>
+
+<div class="upload-row">
+  <input type="file" id="file-input" accept="image/*" multiple onchange="handleFiles(this.files)">
+  <div class="upload-btn" onclick="document.getElementById('file-input').click()">↑ Upload photos</div>
+  <div class="upload-btn" id="paste-btn" onclick="activatePaste()">⌘ Paste image</div>
+</div>
+<div class="uploading" id="uploading"></div>
+<div class="previews" id="previews"></div>
+<div class="hint">Right-click listing photos → Copy image address → paste above.<br>Or upload from device / paste screenshot — auto-uploaded, URL added.</div>
+
+<button class="go" id="go" onclick="run()">
+  <div class="spinner" id="spin"></div>
+  <span id="lbl">Analyse Photos</span>
+</button>
+<div class="err" id="err"></div>
+<div class="results" id="results"></div>
+
+<script>
+const WH = 'https://hook.eu1.make.com/vc96osrefgq5tkpu8ooavor1xa8vnbqg';
+const IMGBB_KEY = '0309d7fb90a81cb692d0f60ac46ae726';
+const IMGBB_URL = 'https://api.imgbb.com/1/upload';
+let pasteActive = false;
+let uploadedUrls = []; // tracks imgbb-uploaded URLs for preview removal
+
+// --- Image upload to ImgBB ---
+async function uploadToImgBB(file) {
+  const base64 = await fileToBase64(file);
+  const fd = new FormData();
+  fd.append('key', IMGBB_KEY);
+  fd.append('expiration', '3600');
+  fd.append('image', base64.split(',')[1]);
+  const res = await fetch(IMGBB_URL, {method: 'POST', body: fd});
+  const data = await res.json();
+  if(!data.success) throw new Error('ImgBB upload failed: ' + (data.error?.message || 'unknown'));
+  return data.data.url;
+}
+
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      // Resize to max 1200px before upload
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, 1200/img.width);
+        const w = Math.round(img.width*scale), h = Math.round(img.height*scale);
+        const c = document.createElement('canvas'); c.width=w; c.height=h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        res(c.toDataURL('image/jpeg', 0.82));
+      };
+      img.src = e.target.result;
+    };
+    reader.onerror = rej;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleFiles(files) {
+  document.getElementById('file-input').value = '';
+  const arr = Array.from(files);
+  setUploading(`Uploading ${arr.length} photo${arr.length>1?'s':''}…`);
+  let ok = 0;
+  for(const file of arr) {
+    try {
+      const url = await uploadToImgBB(file);
+      addUrlToTextarea(url);
+      addPreview(url);
+      ok++;
+    } catch(e) { showErr('Upload failed: ' + e.message); }
+  }
+  setUploading(ok ? `✓ ${ok} photo${ok>1?'s':''} uploaded — URL${ok>1?'s':''} added below` : '');
+}
+
+function activatePaste() {
+  pasteActive = true;
+  const btn = document.getElementById('paste-btn');
+  btn.classList.add('listening');
+  btn.textContent = '⌘ Ready — press Ctrl+V';
+  document.addEventListener('paste', onPaste, {once: true});
+  setTimeout(() => deactivatePaste(), 10000);
+}
+function deactivatePaste() {
+  pasteActive = false;
+  const btn = document.getElementById('paste-btn');
+  btn.classList.remove('listening');
+  btn.textContent = '⌘ Paste image';
+  document.removeEventListener('paste', onPaste);
+}
+async function onPaste(e) {
+  deactivatePaste();
+  const items = e.clipboardData?.items;
+  if(!items) { showErr('Paste not supported here.'); return; }
+  for(const item of items) {
+    if(item.type.startsWith('image/')) {
+      const file = item.getAsFile();
+      setUploading('Uploading pasted image…');
+      try {
+        const url = await uploadToImgBB(file);
+        addUrlToTextarea(url);
+        addPreview(url);
+        setUploading('✓ Photo uploaded — URL added');
+      } catch(e) { showErr('Upload failed: ' + e.message); }
+      return;
+    }
+  }
+  showErr('No image found in clipboard.');
+}
+
+function addUrlToTextarea(url) {
+  const ta = document.getElementById('urls');
+  const current = ta.value.trim();
+  ta.value = current ? current + '\n' + url : url;
+}
+
+function addPreview(url) {
+  uploadedUrls.push(url);
+  const prev = document.getElementById('previews');
+  const div = document.createElement('div');
+  div.className = 'thumb';
+  div.dataset.url = url;
+  div.innerHTML = `<img src="${url}" alt=""><button class="thumb-del" onclick="removeUploaded(this.parentNode)">×</button>`;
+  prev.appendChild(div);
+}
+
+function removeUploaded(div) {
+  const url = div.dataset.url;
+  // Remove from textarea
+  const ta = document.getElementById('urls');
+  ta.value = ta.value.split('\n').filter(l => l.trim() !== url).join('\n');
+  // Remove preview
+  div.remove();
+  uploadedUrls = uploadedUrls.filter(u => u !== url);
+}
+
+function setUploading(msg) { document.getElementById('uploading').textContent = msg; }
+
+// --- Analysis ---
+async function run() {
+  const urls = document.getElementById('urls').value
+    .split('\n').map(u => u.trim()).filter(u => u.startsWith('http'));
+  if(!urls.length) { showErr('Please paste at least one image URL or upload a photo.'); return; }
+  if(urls.length > 10) { showErr('Maximum 10 images at a time.'); return; }
+  hide(); setLoad(true);
+  document.getElementById('results').classList.remove('show');
+  document.getElementById('results').innerHTML = '';
+  try {
+    const res = await fetch(WH, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({urls})
+    });
+    if(!res.ok) throw new Error('Make returned ' + res.status);
+    const txt = await res.text();
+    let d;
+    try { d = JSON.parse(txt); }
+    catch(e) { d = JSON.parse(txt.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/i,'').trim()); }
+    draw(d, urls);
+  } catch(e) { showErr(e.message); }
+  setLoad(false);
+}
+
+function col(s) { return s>=8?'#2ecc71':s>=6?'#f39c12':'#e74c3c'; }
+function rcol(r) { return {'Looks good':'#2ecc71','Inspect carefully':'#f39c12','Concerns noted':'#e74c3c','Avoid':'#e74c3c'}[r]||'#999'; }
+
+function draw(d, urls) {
+  const sc = d.visual_score ?? '—', c = col(sc), rc = rcol(d.recommendation);
+  const fields = [
+    ['Paint',d.paint],['Body',d.body],['Interior',d.interior],
+    ['Engine bay',d.engine_bay],['Undercarriage',d.undercarriage],
+    ['Wheels & tyres',d.wheels_tyres],['Odometer',d.odometer_reading],
+    ['Photo quality',d.photo_quality],['Modifications',d.modifications_visible]
+  ];
+  const gf = (d.green_flags||[]).map(f=>`<div class="flag-item" style="color:#2ecc71">✓ ${f}</div>`).join('') || '<div class="flag-item" style="color:#444">None noted</div>';
+  const rf = (d.red_flags||[]).map(f=>`<div class="flag-item" style="color:#e74c3c">✗ ${f}</div>`).join('') || '<div class="flag-item" style="color:#444">None noted</div>';
+  const photos = urls.map(u=>`<img src="${u}" alt="" onerror="this.style.display='none'">`).join('');
+  document.getElementById('results').innerHTML = `
+    <div class="score-banner">
+      <div class="score-circle" style="color:${c};border-color:${c}">${sc}</div>
+      <div>
+        <div class="rec-badge" style="color:${rc};border-color:${rc}">${d.recommendation||'—'}</div>
+        <div class="summary">${d.summary||''}</div>
+      </div>
+    </div>
+    <div class="grid">${fields.filter(([,v])=>v&&v!=='Not shown').map(([l,v])=>`<div class="cell"><div class="cell-lbl">${l}</div><div class="cell-val">${v}</div></div>`).join('')}</div>
+    <div class="flags">
+      <div class="flag-block"><div class="flag-title" style="color:#2ecc71">Green flags</div>${gf}</div>
+      <div class="flag-block"><div class="flag-title" style="color:#e74c3c">Red flags</div>${rf}</div>
+    </div>
+    <div style="font-size:10px;color:#444;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px">Photos analysed (${d.photo_count||urls.length})</div>
+    <div class="photos-grid">${photos}</div>`;
+  document.getElementById('results').classList.add('show');
+}
+
+function showErr(m) { const e=document.getElementById('err'); e.textContent=m; e.style.display='block'; }
+function hide() { document.getElementById('err').style.display='none'; }
+function setLoad(on) {
+  document.getElementById('spin').classList.toggle('on', on);
+  document.getElementById('lbl').textContent = on ? 'Analysing…' : 'Analyse Photos';
+  document.getElementById('go').disabled = on;
+}
+</script>
+</body>
+</html>
